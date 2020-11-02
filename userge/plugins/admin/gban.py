@@ -8,6 +8,7 @@
 #
 # All rights reserved
 
+import json
 import asyncio
 from typing import Union
 
@@ -15,7 +16,7 @@ import aiohttp
 import spamwatch
 from spamwatch.types import Ban
 from pyrogram.errors.exceptions.bad_request_400 import (
-    ChatAdminRequired, UserAdminInvalid)
+    ChatAdminRequired, UserAdminInvalid, ChannelInvalid)
 
 from userge import userge, Message, Config, get_collection, filters, pool
 
@@ -106,7 +107,7 @@ async def gban_user(message: Message):
                 f"**Chat:** {chat.title}\n"
                 f"**Chat ID:** `{chat.id}`\n"
                 f"**Reason:** `{reason}`\n\n$GBAN #id{user_id}")
-        except (ChatAdminRequired, UserAdminInvalid):
+        except (ChatAdminRequired, UserAdminInvalid, ChannelInvalid):
             pass
     await GBAN_USER_BASE.insert_one({'firstname': firstname,
                                      'user_id': user_id,
@@ -146,7 +147,7 @@ async def ungban_user(message: Message):
                     f"\n**User:** [{firstname}](tg://user?id={user_id})\n"
                     f"**User ID:** `{user_id}`\n\n"
                     f"$UNGBAN #id{user_id}")
-            except (ChatAdminRequired, UserAdminInvalid):
+            except (ChatAdminRequired, UserAdminInvalid, ChannelInvalid):
                 pass
     await message.edit(r"\\**#UnGbanned_User**//"
                        f"\n\n**First Name:** [{firstname}](tg://user?id={user_id})\n"
@@ -292,9 +293,10 @@ async def gban_at_entry(message: Message):
         elif Config.ANTISPAM_SENTRY:
             async with aiohttp.ClientSession() as ses:
                 async with ses.get(f'https://api.cas.chat/check?user_id={user_id}') as resp:
-                    res = await resp.json()
+                    res = json.loads(await resp.text())
             if res['ok']:
-                reason = ' | '.join(res['result']['messages']) if 'result' in res else None
+                reason = ' | '.join(
+                    res['result']['messages']) if 'result' in res else None
                 await asyncio.gather(
                     message.client.kick_chat_member(chat_id, user_id),
                     message.reply(
