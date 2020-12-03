@@ -46,7 +46,7 @@ async def helpme(message: Message) -> None:  # pylint: disable=missing-function-
     plugins = userge.manager.enabled_plugins
     if not message.input_str:
         out_str = f"""⚒ <b><u>(<code>{len(plugins)}</code>) Plugin(s) Available</u></b>\n\n"""
-        cat_plugins = userge.manager.get_all_plugins()
+        cat_plugins = userge.manager.get_plugins()
         for cat in sorted(cat_plugins):
             if cat == "plugins":
                 continue
@@ -84,7 +84,7 @@ async def helpme(message: Message) -> None:  # pylint: disable=missing-function-
 if userge.has_bot:
     def check_owner(func):
         async def wrapper(_, c_q: CallbackQuery):
-            if c_q.from_user and c_q.from_user.id == Config.OWNER_ID:
+            if c_q.from_user and c_q.from_user.id in Config.OWNER_ID:
                 try:
                     await func(c_q)
                 except MessageNotModified:
@@ -93,7 +93,7 @@ if userge.has_bot:
                     await c_q.answer("Sorry, I Don't Have Permissions to edit this 😔",
                                      show_alert=True)
             else:
-                user_dict = await userge.bot.get_user_dict(Config.OWNER_ID)
+                user_dict = await userge.bot.get_user_dict(Config.OWNER_ID[0])
                 await c_q.answer(
                     f"Only {user_dict['flname']} Can Access this...! Build Your Own @TheUserge 🤘",
                     show_alert=True)
@@ -211,7 +211,7 @@ if userge.has_bot:
             await c_q.answer("message now outdated !", show_alert=True)
             return
         user_id, flname, msg = PRVT_MSGS[msg_id]
-        if c_q.from_user.id == user_id or c_q.from_user.id == Config.OWNER_ID:
+        if c_q.from_user.id == user_id or c_q.from_user.id in Config.OWNER_ID:
             await c_q.answer(msg, show_alert=True)
         else:
             await c_q.answer(
@@ -371,7 +371,7 @@ if userge.has_bot:
                 )
             )
         ]
-        if inline_query.from_user and inline_query.from_user.id == Config.OWNER_ID:
+        if inline_query.from_user and inline_query.from_user.id in Config.OWNER_ID:
             results.append(
                 InlineQueryResultArticle(
                     id=uuid4(),
@@ -408,6 +408,24 @@ if userge.has_bot:
                         description="Only he/she can open it",
                         thumb_url="https://imgur.com/download/Inyeb1S",
                         reply_markup=InlineKeyboardMarkup(prvte_msg)
+                    )
+                )
+            elif "pmpermit" in inline_query.query:
+                owner = await userge.get_me()
+                text = f"Hello, welcome to **{owner.first_name}** Dm.\n\nWhat you want to do ?"
+                buttons = [[
+                    InlineKeyboardButton(
+                        "Contact Me", callback_data="pm_contact"),
+                    InlineKeyboardButton(
+                        "Spam here", callback_data="pm_spam")]]
+                results.append(
+                    InlineQueryResultArticle(
+                        id=uuid4(),
+                        title="Pm Permit",
+                        input_message_content=InputTextMessageContent(text),
+                        description="Inline Pm Permit Handler",
+                        thumb_url="https://imgur.com/download/Inyeb1S",
+                        reply_markup=InlineKeyboardMarkup(buttons)
                     )
                 )
         await inline_query.answer(results=results, cache_time=3)

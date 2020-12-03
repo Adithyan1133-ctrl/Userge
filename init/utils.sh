@@ -83,12 +83,16 @@ fetchBranches() {
     done
 }
 
+updateBuffer() {
+    git config http.postBuffer 524288000
+}
+
 upgradePip() {
     pip3 install -U pip &> /dev/null
 }
 
 installReq() {
-    pip3 install -r $1/requirements.txt &> /dev/null
+    pip3 install --use-feature=2020-resolver -r $1/requirements.txt &> /dev/null
 }
 
 printLine() {
