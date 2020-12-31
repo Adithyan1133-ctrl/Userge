@@ -11,6 +11,7 @@
 import asyncio
 from typing import Dict
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import BotInlineDisabled
 
 from userge import userge, filters, Message, Config, get_collection
 from userge.utils import SafeDict
@@ -20,6 +21,7 @@ SAVED_SETTINGS = get_collection("CONFIGS")
 ALLOWED_COLLECTION = get_collection("PM_PERMIT")
 
 pmCounter: Dict[int, int] = {}
+_IS_INLINE = True
 allowAllFilter = filters.create(lambda _, __, ___: Config.ALLOW_ALL_PMS)
 noPmMessage = bk_noPmMessage = ("Hello {fname} this is an automated message\n"
                                 "Please wait until you get approved to direct message "
@@ -28,12 +30,15 @@ blocked_message = bk_blocked_message = "**You were automatically blocked**"
 
 
 async def _init() -> None:
-    global noPmMessage, blocked_message  # pylint: disable=global-statement
+    global noPmMessage, blocked_message, _IS_INLINE  # pylint: disable=global-statement
     async for chat in ALLOWED_COLLECTION.find({"status": 'allowed'}):
         Config.ALLOWED_CHATS.add(chat.get("_id"))
     _pm = await SAVED_SETTINGS.find_one({'_id': 'PM GUARD STATUS'})
     if _pm:
         Config.ALLOW_ALL_PMS = bool(_pm.get('data'))
+    i_pm = await SAVED_SETTINGS.find_one({'_id': 'INLINE_PM_PERMIT'})
+    if i_pm:
+        _IS_INLINE = bool(i_pm.get('data'))
     _pmMsg = await SAVED_SETTINGS.find_one({'_id': 'CUSTOM NOPM MESSAGE'})
     if _pmMsg:
         noPmMessage = _pmMsg.get('data')
@@ -128,6 +133,25 @@ async def pmguard(message: Message):
         {'_id': 'PM GUARD STATUS'}, {"$set": {'data': Config.ALLOW_ALL_PMS}}, upsert=True)
 
 
+@userge.on_cmd(
+    "ipmguard", about={
+        'header': "Switchs the Inline pm permiting module on",
+        'description': "This is switched off in default.",
+        'usage': "{tr}ipmguard"},
+    allow_channels=False)
+async def ipmguard(message: Message):
+    """ enable or disable inline pmpermit """
+    global _IS_INLINE  # pylint: disable=global-statement
+    if _IS_INLINE:
+        _IS_INLINE = False
+        await message.edit("`Inline PM_guard activated`", del_in=3, log=__name__)
+    else:
+        _IS_INLINE = True
+        await message.edit("`Inline PM_guard deactivated`", del_in=3, log=__name__)
+    await SAVED_SETTINGS.update_one(
+        {'_id': 'INLINE_PM_PERMIT'}, {"$set": {'data': _IS_INLINE}}, upsert=True)
+
+
 @userge.on_cmd("setpmmsg", about={
     'header': "Sets the reply message",
     'description': "You can change the default message which userge gives on un-invited PMs",
@@ -155,6 +179,20 @@ async def set_custom_nopm_message(message: Message):
                 {'_id': 'CUSTOM NOPM MESSAGE'}, {"$set": {'data': string}}, upsert=True)
         else:
             await message.err("invalid input!")
+
+
+@userge.on_cmd("ipmmsg", about={
+    'header': "Set inline pm msg for Inline pmpermit",
+    'usage': "{tr}ipmmsg [text | reply to text msg]"}, allow_channels=False)
+async def change_inline_message(message: Message):
+    """ set inline pm message """
+    string = message.input_or_reply_raw
+    if string:
+        await message.edit('`Custom inline pm message saved`', del_in=3, log=True)
+        await SAVED_SETTINGS.update_one(
+            {'_id': 'CUSTOM_INLINE_PM_MESSAGE'}, {"$set": {'data': string}}, upsert=True)
+    else:
+        await message.err("invalid input!")
 
 
 @userge.on_cmd("setbpmmsg", about={
@@ -230,13 +268,17 @@ async def uninvitedPmHandler(message: Message):
                 "Please wait until you get approved to pm !", del_in=5)
     else:
         pmCounter.update({message.from_user.id: 1})
-        if userge.has_bot:
-            bot_username = (await userge.bot.get_me()).username
-            k = await userge.get_inline_bot_results(bot_username, "pmpermit")
-            await userge.send_inline_bot_result(
-                message.chat.id, query_id=k.query_id,
-                result_id=k.results[2].id, hide_via=True
-            )
+        if userge.has_bot and _IS_INLINE:
+            try:
+                bot_username = (await userge.bot.get_me()).username
+                k = await userge.get_inline_bot_results(bot_username, "pmpermit")
+                await userge.send_inline_bot_result(
+                    message.chat.id, query_id=k.query_id,
+                    result_id=k.results[2].id, hide_via=True
+                )
+            except BotInlineDisabled:
+                await message.reply(
+                    noPmMessage.format_map(SafeDict(**user_dict)) + '\n`- Protected by userge`')
         else:
             await message.reply(
                 noPmMessage.format_map(SafeDict(**user_dict)) + '\n`- Protected by userge`')
